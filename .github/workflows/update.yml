@@ -1,0 +1,110 @@
+name: Auto-update ruflo
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Check for upstream update
+        id: check
+        run: |
+          # Get current version from flake.nix
+          CURRENT_VERSION=$(grep 'version = ' flake.nix | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "current=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+
+          # Get latest release tag from upstream
+          LATEST_TAG=$(curl -s https://api.github.com/repos/ruvnet/ruflo/releases/latest | jq -r '.tag_name')
+          LATEST_VERSION="${LATEST_TAG#v}"
+          echo "latest=$LATEST_VERSION" >> "$GITHUB_OUTPUT"
+
+          if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
+            echo "up_to_date=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Already up to date: v$CURRENT_VERSION"
+          else
+            echo "up_to_date=false" >> "$GITHUB_OUTPUT"
+            echo "🔄 Update available: v$CURRENT_VERSION → v$LATEST_VERSION"
+          fi
+
+      - name: Update flake.nix
+        if: steps.check.outputs.up_to_date == 'false'
+        env:
+          NEW_VERSION: ${{ steps.check.outputs.latest }}
+        run: |
+          set -euo pipefail
+
+          # Compute new source hash
+          NEW_SRC_HASH=$(nix-prefetch-url --unpack \
+            "https://github.com/ruvnet/ruflo/archive/refs/tags/v${NEW_VERSION}.tar.gz" 2>/dev/null)
+          NEW_SRC_SRI=$(nix hash to-sri --type sha256 "$NEW_SRC_HASH" 2>/dev/null || \
+                        nix hash convert --hash-algo sha256 --to sri "$NEW_SRC_HASH")
+          echo "Source hash: $NEW_SRC_SRI"
+
+          # Update version in flake.nix
+          sed -i "s|version = \"[^\"]*\"|version = \"${NEW_VERSION}\"|" flake.nix
+
+          # Update source hash in flake.nix
+          # The source hash is the first sha256- after fetchFromGitHub
+          OLD_SRC_HASH=$(grep -A5 'fetchFromGitHub' flake.nix | grep 'hash = ' | head -1 | sed 's/.*"\(sha256-[^"]*\)".*/\1/')
+          sed -i "s|${OLD_SRC_HASH}|${NEW_SRC_SRI}|" flake.nix
+
+          # Compute new npm deps hash by attempting a build with dummy hash
+          sed -i 's|npmDepsHash = "sha256-[^"]*"|npmDepsHash = ""|' flake.nix
+
+          # Stage flake.nix so nix sees it
+          git add flake.nix
+
+          # Try building — it will fail and print the correct hash
+          NEW_NPM_HASH=$(nix build .#ruflo 2>&1 | grep "got:" | awk '{print $2}' || true)
+          if [ -z "$NEW_NPM_HASH" ]; then
+            echo "⚠️ Could not determine npm deps hash, build may have succeeded with empty hash"
+            NEW_NPM_HASH="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+          fi
+          echo "NPM deps hash: $NEW_NPM_HASH"
+
+          # Update the npm deps hash
+          sed -i "s|npmDepsHash = \"[^\"]*\"|npmDepsHash = \"${NEW_NPM_HASH}\"|" flake.nix
+
+          # Update flake.lock
+          git add flake.nix
+          nix flake update
+
+          # Verify the build succeeds
+          nix build .#ruflo
+          echo "✅ Build successful"
+
+      - name: Create Pull Request
+        if: steps.check.outputs.up_to_date == 'false'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update ruflo to v${{ steps.check.outputs.latest }}"
+          title: "Update ruflo to v${{ steps.check.outputs.latest }}"
+          body: |
+            Automated update of ruflo from v${{ steps.check.outputs.current }} to v${{ steps.check.outputs.latest }}.
+
+            **Upstream release:** https://github.com/ruvnet/ruflo/releases/tag/v${{ steps.check.outputs.latest }}
+
+            Build was verified to succeed before opening this PR.
+          branch: auto-update/ruflo-v${{ steps.check.outputs.latest }}
+          delete-branch: true
+          labels: |
+            automated
+            dependency-update
