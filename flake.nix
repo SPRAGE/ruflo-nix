@@ -56,6 +56,14 @@
               if [ -f "$out/bin/claude-flow" ] && [ ! -f "$out/bin/ruflo" ]; then
                 ln -s "$out/bin/claude-flow" "$out/bin/ruflo"
               fi
+
+              # Fix agentdb exports path mismatch: dist/controllers → dist/src/controllers
+              # Upstream bug: package.json exports map points "./controllers" at
+              # ./dist/controllers/index.js but tsc outputs to dist/src/controllers/.
+              agentdb_dist="$out/lib/node_modules/claude-flow/node_modules/agentic-flow/node_modules/agentdb/dist"
+              if [ -d "$agentdb_dist/src/controllers" ] && [ ! -e "$agentdb_dist/controllers" ]; then
+                ln -s src/controllers "$agentdb_dist/controllers"
+              fi
             '';
 
             meta = with pkgs.lib; {
