@@ -7,13 +7,13 @@ Nix flake wrapping [ruvnet/ruflo](https://github.com/ruvnet/ruflo) — the Enter
 ### Try it without installing
 
 ```bash
-nix run github:shaun/ruflow-nix -- --help
+nix run github:shaun/ruflo-nix -- --help
 ```
 
 ### Use in a dev shell
 
 ```bash
-nix shell github:shaun/ruflow-nix
+nix shell github:shaun/ruflo-nix
 ruflo --version
 ```
 
@@ -24,7 +24,7 @@ Add the input:
 ```nix
 # flake.nix
 {
-  inputs.ruflo.url = "github:shaun/ruflow-nix";
+  inputs.ruflo.url = "github:shaun/ruflo-nix";
   # ...
 }
 ```
@@ -88,8 +88,8 @@ You can also trigger the update manually from the Actions tab.
 ## Building locally
 
 ```bash
-git clone https://github.com/shaun/ruflow-nix
-cd ruflow-nix
+git clone https://github.com/shaun/ruflo-nix
+cd ruflo-nix
 nix build
 ./result/bin/ruflo --version
 ```
