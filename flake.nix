@@ -16,16 +16,16 @@
         packages = {
           ruflo = pkgs.buildNpmPackage rec {
             pname = "ruflo";
-            version = "3.5.14";
+            version = "3.20.0";
 
             src = pkgs.fetchFromGitHub {
               owner = "ruvnet";
               repo = "ruflo";
               rev = "v${version}";
-              hash = "sha256-z4XpsMAopEdSuaM3f7iN3Xq2I30Izl6t8WPNPlHVXzY=";
+              hash = "sha256-z3ZYCYtdgv8AWqiB2vxOYU+h0JZtk5IxB38IyN06HSY=";
             };
 
-            npmDepsHash = "sha256-BnzVQ8XALE0I6Ra/YJG9JfEs+7QpHmJkgE1PyApLL4M=";
+            npmDepsHash = "sha256-FYocc34ck0jXLja4nrSqLmTf3q2RA3Fk6TGyS0BAb2k=";
 
             inherit nodejs;
 
